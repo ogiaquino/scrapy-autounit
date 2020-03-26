@@ -12,73 +12,68 @@ from scrapy_autounit.utils import (
     prepare_callback_replay,
 )
 from scrapy_autounit.cli.utils import (
-    get_fixture_path,
     check_path,
-    check_args,
+    get_fixture_path,
+    discover_fixtures,
 )
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-s',
-        '--spider',
-        help='The spider where to look fixtures for update'
-    )
-    parser.add_argument(
-        '-c',
-        '--callback',
-        help='The callback where to look fixtures for update (requires spider)'
-    )
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawTextHelpFormatter)
+
+    parser.add_argument('spider', help="The spider to update.")
+    parser.add_argument('callback', help="The callback to update.")
     parser.add_argument(
         '-f',
         '--fixture',
         help=(
-            'The fixture number to update (requires spider and callback).'
-            'It can be an integer indicating the fixture number or a string'
-            'indicating the fixture name'
+            "The fixture number to update.\n"
+            "Can be the fixture number or the fixture name.\n"
+            "If not specified, all fixtures will be updated."
         )
-    )
-    parser.add_argument(
-        '-p',
-        '--path',
-        help='The full path for the fixture to update'
     )
 
     args = parser.parse_args()
 
     if not inside_project():
-        print('No active Scrapy project')
+        print("No active Scrapy project")
         sys.exit(1)
 
     project_dir = get_project_dir()
     sys.path.append(project_dir)
 
-    path = args.path
-    if not path:
-        check_args(parser, args)
-        path = get_fixture_path(
-            project_dir, args.spider, args.callback, args.fixture
+    spider = args.spider
+    callback = args.callback
+    fixture = args.fixture
+
+    to_update = []
+    if fixture:
+        path = get_fixture_path(project_dir, spider, callback, fixture)
+        check_path(parser, path)
+        to_update.append(path)
+    else:
+        to_update = discover_fixtures(project_dir, spider, callback)
+
+    for path in to_update:
+        data, _, spider, _ = prepare_callback_replay(path)
+
+        request = request_from_dict(data['request'], spider)
+
+        response_cls = auto_import(
+            data['response'].pop('cls', 'scrapy.http.HtmlResponse')
+        )
+        response = response_cls(request=data["request"], **data['response'])
+
+        data["result"], _ = parse_callback_result(
+            request.callback(response), spider
         )
 
-    check_path(parser, path)
+        fixture_dir, filename = os.path.split(path)
+        fixture_index = re.search(r"\d+", filename).group()
+        add_sample(fixture_index, fixture_dir, filename, data)
 
-    data, _, spider, _ = prepare_callback_replay(path)
+        print("Fixture '{}' successfully updated.".format(
+            os.path.relpath(path)))
 
-    request = request_from_dict(data['request'], spider)
-
-    response_cls = auto_import(
-        data['response'].pop('cls', 'scrapy.http.HtmlResponse')
-    )
-    response = response_cls(request=data["request"], **data['response'])
-
-    data["result"], _ = parse_callback_result(
-        request.callback(response), spider
-    )
-
-    test_dir, filename = os.path.split(path)
-    fixture_index = re.search(r"\d+", filename).group()
-    add_sample(fixture_index, test_dir, filename, data)
-
-    print("Fixture '{}' successfully updated.".format(os.path.relpath(path)))
     return 0
