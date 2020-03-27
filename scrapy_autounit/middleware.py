@@ -131,7 +131,11 @@ class AutounitMiddleware:
         )
 
         if callback_counter < self.max_fixtures:
-            add_sample(callback_counter + 1, test_dir, test_name, data)
+            filename = '{}_{}.bin'.format(
+                input_data['spider_args']['isbn'],
+                callback_counter + 1
+            )
+            add_sample(callback_counter + 1, test_dir, test_name, data, filename)
         else:
             r = random.randint(0, callback_counter)
             if r < self.max_fixtures:

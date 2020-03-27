@@ -98,10 +98,11 @@ def get_or_create_test_dir(base_path, spider_name, callback_name, extra=None):
     return test_dir, test_name
 
 
-def add_sample(index, test_dir, test_name, data):
+def add_sample(index, test_dir, test_name, data, filename=None):
     url = data['request']['url']
     encoding = data['response']['encoding']
-    filename = 'fixture%s.bin' % str(index)
+    if not filename:
+        filename = 'fixture%s.bin' % str(index)
     path = os.path.join(test_dir, filename)
     info = pickle_data({
         'data': pickle_data(data),
@@ -210,6 +211,9 @@ def clean_item(item, settings):
 
 def _clean(data, settings, name):
     fields = settings.get(name, default=[])
+    if 'meta' in data:
+        data['meta']['item'].pop('timestamp', None)
+        data['meta']['item'].pop('ts', None)
     for field in fields:
         data.pop(field, None)
 
